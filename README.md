@@ -110,7 +110,28 @@ Avant d'utiliser le script, assurez-vous de configurer les variables nécessaire
 - `$MaxLogDays` : Nombre de jours pour conserver les fichiers de log avant compression ou suppression. Exemple : 7 jours.
 - `$CompressedRetentionDays` : Nombre de jours pour conserver les fichiers compressés avant suppression. Exemple : 30 jours.
 
-### Exemple de Configuration
+## Sécurité SSH
+### Acceptation de Clé SSH
+Lors de la connexion à un serveur SFTP, il est important de gérer correctement les clés SSH pour assurer la sécurité des transferts.(ligne 141)
+
+### Serveur sur le Réseau Local :
+Pour les connexions à des serveurs SFTP sur le même réseau local, vous pouvez configurer WinSCP pour accepter automatiquement n'importe quelle clé SSH en utilisant la variable `$sessionOptions.GiveUpSecurityAndAcceptAnySshHostKey = $true`.
+
+### Serveur à Distance :
+Pour des connexions à des serveurs SFTP distants, il est recommandé de spécifier et accepter la clé SSH de l'hôte pour éviter des risques de sécurité. Voici comment vous pouvez ajouter et accepter la clé SSH :
+
+```powershell
+$sessionOptions = New-Object WinSCP.SessionOptions -Property @{
+    Protocol = [WinSCP.Protocol]::Sftp
+    HostName = $SftpHost
+    PortNumber = $Port
+    UserName = $Username
+    Password = $Password
+    SshHostKeyFingerprint = "ssh-rsa 2048 xxxxxxxxxxxxxxxxxxxxxxx="
+}
+```
+
+## Exemple de Configuration
 
 ```powershell
 $PlexToken = 'votre_token_plex'
