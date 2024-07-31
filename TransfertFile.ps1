@@ -19,14 +19,18 @@ $Password = ''  # Mot de passe pour la connexion SFTP
 # ========================================
 # Clés de Bibliothèque Plex
 # ========================================
-$MoviesLibraryKey = '1'  # Clé de la bibliothèque pour les films dans Plex
+$FilmsLibraryKey = '1'  # Clé de la bibliothèque pour les films dans Plex
 $SeriesLibraryKey = '2'  # Clé de la bibliothèque pour les séries dans Plex
-
+# Dictionnaire des noms des bibliothèques Plex
+$LibraryNames = @{
+    '1' = 'Films'
+    '2' = 'Series'
+}
 # ========================================
 # Chemins Distants pour le SFTP
 # ========================================
-$MoviesRemotePath = ''  # Chemin distant pour les films
-$SeriesRemotePath = ''  # Chemin distant pour les séries
+$MoviesRemotePath = '/var/lib/plexmediaserver/films/'  # Chemin distant pour les films
+$SeriesRemotePath = '/var/lib/plexmediaserver/series/'  # Chemin distant pour les séries
 
 # ========================================
 # Chemin de la Bibliothèque WinSCP
@@ -45,17 +49,18 @@ $MaxLogDays = 7  # Conserver les fichiers de log pendant 7 jours
 # Nombre de jours pour conserver les fichiers compressés avant suppression
 $CompressedRetentionDays = 30  # Conserver les fichiers compressés pendant 30 jours
 # Chemin du répertoire de logs
-$LogDir = ""  # Répertoire de stockage des fichiers de log
+$LogDir = "C:\Users\TNF_A\Downloads\plex\logs"  # Répertoire de stockage des fichiers de log
 $LogFilePath = Join-Path -Path $LogDir -ChildPath "TransferFile-$(get-date -f dd.MM.yyyy-HH.mm.ss).log"  # Chemin du fichier log actuel
 
 # Fonction pour écrire dans un fichier log avec gestion de compression et suppression
 function Write-Log {
     param (
-        [string]$Message
+        [string]$Message,
+        [string]$Level = "INFO"
     )
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "$timestamp - $Message"
+    $logMessage = "$timestamp [$Level] - $Message"
 
     # Ajouter le message au fichier de log actuel
     Add-Content -Path $LogFilePath -Value $logMessage
@@ -105,19 +110,21 @@ function Create-RemoteDirectory {
     )
     
     if ($session -ne $null) {
+        Write-Log -Message "Vérification ou création du répertoire distant : $RemoteDirPath" -Level "DEBUG"
         try {
             if (-not $session.FileExists($RemoteDirPath)) {
+                Write-Log -Message "Tentative de création du répertoire distant" -Level "INFO"
                 $session.CreateDirectory($RemoteDirPath)
-                Write-Log "Répertoire distant créé: $RemoteDirPath"
+                Write-Log -Message "Répertoire distant créé: $RemoteDirPath" -Level "INFO"
             } else {
-                Write-Log "Le répertoire distant existe déjà: $RemoteDirPath"
+                Write-Log -Message "Le répertoire distant existe déjà: $RemoteDirPath" -Level "INFO"
             }
         } catch {
-            Write-Log "Erreur lors de la création du répertoire distant: $_"
+            Write-Log -Message "Problème lors de la création du répertoire distant: $_" -Level "ERROR"
             exit 1
         }
     } else {
-        Write-Log "Erreur: La session WinSCP n'est pas initialisée."
+        Write-Log -Message "La session WinSCP n'est pas initialisée." -Level "ERROR"
         exit 1
     }
 }
@@ -130,15 +137,18 @@ function Initialize-Session {
     $sessionOptions.PortNumber = $Port
     $sessionOptions.UserName = $Username
     $sessionOptions.Password = $Password
-    $sessionOptions.GiveUpSecurityAndAcceptAnySshHostKey = $true
 
+    $sessionOptions.GiveUpSecurityAndAcceptAnySshHostKey = $true
+    Write-Log -Message "Configuration SFTP : Hôte=$SftpHost, Port=$Port, Utilisateur=$Username" -Level "DEBUG"
     $global:session = New-Object WinSCP.Session
 
     try {
+        Write-Log -Message "Tentative de connexion au SFTP : $SftpHost." -Level "INFO"
         $session.Open($sessionOptions)
-        Write-Log "Session WinSCP ouverte avec succès."
+        Write-Log -Message "Session WinSCP ouverte avec succès." -Level "INFO"
     } catch {
-        Write-Log "Erreur lors de l'ouverture de la session WinSCP: $_"
+        Write-Log -Message "Echec de la connexion SFTP. Hôte : $SftpHost, Port : $Port" -Level "ERROR"
+        Write-Log -Message "Erreur lors de l'ouverture de la session WinSCP: $_" -Level "ERROR"
         exit 1
     }
 }
@@ -151,7 +161,7 @@ function Transfer-File {
     )
 
     if ($session -eq $null) {
-        Write-Log "Erreur: La session WinSCP n'est pas initialisée."
+        Write-Log -Message "La session WinSCP n'est pas initialisée." -Level "ERROR"
         exit 1
     }
 
@@ -159,15 +169,18 @@ function Transfer-File {
     $transferOptions.TransferMode = [WinSCP.TransferMode]::Binary
 
     try {
+        Write-Log -Message "Vérification de l'existence du fichier distant : $RemoteFilePath" -Level "DEBUG"
         if ($session.FileExists($RemoteFilePath)) {
-            Write-Log "Erreur: Le fichier distant existe déjà: $RemoteFilePath"
+            Write-Log -Message "Le fichier distant existe déjà: $RemoteFilePath" -Level "ERROR"
             exit 1
         }
+        Write-Log -Message "Le fichier distant n'existe pas, prêt à démarrer le transfert." -Level "DEBUG"
+        Write-Log -Message "Début du transfert du fichier local : $LocalFilePath vers $RemoteFilePath" -Level "INFO"
         $transferResult = $session.PutFiles($LocalFilePath, $RemoteFilePath, $False, $transferOptions)
         $transferResult.Check()
-        Write-Log "Fichier transféré avec succès: $RemoteFilePath"
+        Write-Log -Message "Transfert du fichier terminé avec succès : $RemoteFilePath" -Level "INFO"
     } catch {
-        Write-Log "Erreur de transfert: $_"
+        Write-Log -Message "Erreur de transfert: $_" -Level "ERROR"
         exit 1
     }
 }
@@ -177,13 +190,15 @@ function Scan-PlexLibrary {
     param (
         [string]$LibraryKey
     )
-
+    $libraryName = $LibraryNames[$LibraryKey]
+    Write-Log -Message "Configuration du serveur Plex : $PlexServerAddress avec le token fourni." -Level "DEBUG"
     $plexUrl = "$PlexServerAddress/library/sections/$LibraryKey/refresh?X-Plex-Token=$PlexToken"
     try {
+        Write-Log -Message "Connexion au serveur Plex : $PlexServerAddress" -Level "INFO"
         $response = Invoke-RestMethod -Uri $plexUrl -Method Get
-        Write-Log "Scan de la bibliothèque Plex lancé."
+        Write-Log -Message "Scan de la bibliothèque Plex ($libraryName) lancé pour la clé $LibraryKey." -Level "INFO"
     } catch {
-        Write-Log "Erreur lors de la demande de scan Plex: $_"
+        Write-Log -Message "Erreur lors de la demande de scan Plex pour la bibliothèque $libraryName : $_" -Level "ERROR"
         exit 1
     }
 }
@@ -196,14 +211,15 @@ function Remove-LocalFile {
 
     if (Test-Path $LocalFilePath) {
         Remove-Item -Path $LocalFilePath -Force
-        Write-Log "Fichier local supprimé: $LocalFilePath"
+        Write-Log -Message "Fichier local supprimé: $LocalFilePath" -Level "INFO"
     } else {
-        Write-Log "Le fichier local n'existe pas: $LocalFilePath"
+        Write-Log -Message "Le fichier local n'existe pas: $LocalFilePath" -Level "WARNING"
     }
 }
 
 # Exécution du script
 try {
+    Write-Log -Message "Variables de configuration : $($PlexToken), $($SftpHost), $($Port), $($Username)" -Level "DEBUG"
     # Charger la bibliothèque WinSCP
     Add-Type -Path $WinSCPLibPath
 
@@ -212,9 +228,11 @@ try {
 
     # Déterminer le type de fichier et le chemin distant
     if ($LocalFilePath -match "films") {
+        Write-Log -Message "Construction des variables pour la catégories Films" -Level "INFO"
         $RemoteFilePath = $MoviesRemotePath + (Get-Item $LocalFilePath).Name
-        $LibraryKey = $MoviesLibraryKey
+        $LibraryKey = $FilmsLibraryKey
     } elseif ($LocalFilePath -match "series") {
+        Write-Log -Message "Construction des variables pour la catégories Series" -Level "INFO"
         # Extraire le chemin relatif pour les séries
         $LocalFileDir = Split-Path -Path $LocalFilePath -Parent
         $SeriesRelativePath = $LocalFileDir -replace [regex]::Escape((Split-Path -Path $LocalFileDir -Leaf) + "\"), ""
@@ -225,17 +243,17 @@ try {
         # Créer le répertoire distant pour les séries si nécessaire
         Create-RemoteDirectory -RemoteDirPath $RemoteDirPath
     } else {
-        Write-Log "Erreur: Type de fichier inconnu pour $LocalFilePath"
+        Write-Log -Message "Type de fichier inconnu pour $LocalFilePath" -Level "ERROR"
         exit 1
     }
 
     # Afficher les valeurs des variables pour débogage
-    Write-Log "Chemin local du fichier: $LocalFilePath"
-    Write-Log "Chemin distant du fichier: $RemoteFilePath"
+    Write-Log -Message "Chemin local du fichier: $LocalFilePath" -Level "DEBUG"
+    Write-Log -Message "Chemin distant du fichier: $RemoteFilePath" -Level "DEBUG"
 
     # Vérifier si le fichier local existe
     if (-not (Test-Path $LocalFilePath)) {
-        Write-Log "Le fichier local n'existe pas: $LocalFilePath"
+        Write-Log -Message "Le fichier local n'existe pas: $LocalFilePath" -Level "ERROR"
         exit 1
     }
 
@@ -249,12 +267,13 @@ try {
     Remove-LocalFile -LocalFilePath $LocalFilePath
 
 } catch {
-    Write-Log "Erreur: $_"
+    Write-Log -Message "Erreur: $_" -Level "ERROR"
     exit 1
 } finally {
     # Fermer la session
     if ($session -ne $null) {
         $session.Dispose()
-        Write-Log "Session WinSCP fermée."
+        Write-Log -Message "Session WinSCP fermée." -Level "INFO"
+        Write-Log -Message "Le script s'est terminé avec succès." -Level "INFO"
     }
 }
