@@ -49,7 +49,7 @@ $MaxLogDays = 7  # Conserver les fichiers de log pendant 7 jours
 # Nombre de jours pour conserver les fichiers compressés avant suppression
 $CompressedRetentionDays = 30  # Conserver les fichiers compressés pendant 30 jours
 # Chemin du répertoire de logs
-$LogDir = "C:\Users\TNF_A\Downloads\plex\logs"  # Répertoire de stockage des fichiers de log
+$LogDir = "C:\Users\XXXX\Downloads\plex\logs"  # Répertoire de stockage des fichiers de log
 $LogFilePath = Join-Path -Path $LogDir -ChildPath "TransferFile-$(get-date -f dd.MM.yyyy-HH.mm.ss).log"  # Chemin du fichier log actuel
 
 # Fonction pour écrire dans un fichier log avec gestion de compression et suppression
