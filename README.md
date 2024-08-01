@@ -1,6 +1,8 @@
 # JDownloaderPlexSync
 
 ## Description
+***Version pour compte non premium***
+
 Ce projet automatise le transfert de fichiers multimédias depuis une machine locale vers un serveur Plex en utilisant WinSCP pour les transferts de fichiers SFTP. Il gère également le scan de la bibliothèque Plex pour s'assurer que le nouveau contenu est reconnu. Le script peut différencier les films et les séries et les organiser en conséquence.
 
 ## Fonctionnalités
